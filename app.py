@@ -18,6 +18,7 @@ class InputData(BaseModel):
 def ping():
     return {"status":"ok"}
 
+
 @app.post("/invocations")
 async def invoke(input_data:InputData):
     body= np.array(input_data.data)
