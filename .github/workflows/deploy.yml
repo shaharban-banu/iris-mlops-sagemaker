@@ -1,0 +1,66 @@
+name: Deploy to SageMaker
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to ECR
+      run: |
+        aws ecr get-login-password --region $AWS_REGION | \
+        docker login --username AWS --password-stdin \
+        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+    - name: Build Docker image
+      run: |
+        docker build -t iris-fastapi .
+
+    - name: Tag image
+      run: |
+        docker tag iris-fastapi:latest \
+        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+
+    - name: Push image to ECR
+      run: |
+        docker push \
+        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+
+    - name: Deploy to SageMaker
+      run: |
+        pip install sagemaker boto3
+
+        python <<EOF
+        import sagemaker
+        from sagemaker.model import Model
+
+        role = "${{ secrets.SAGEMAKER_ROLE_ARN }}"
+        image_uri = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest"
+        endpoint_name = "${{ secrets.ENDPOINT_NAME }}"
+
+        sm_model = Model(
+            image_uri=image_uri,
+            role=role
+        )
+
+        predictor = sm_model.deploy(
+            initial_instance_count=1,
+            instance_type="ml.t2.medium",
+            endpoint_name=endpoint_name,
+            update_endpoint=True
+        )
+        EOF
