@@ -68,7 +68,7 @@ jobs:
     # 🚀 Deploy to SageMaker
     - name: Deploy to SageMaker Endpoint
       run: |
-        pip install sagemaker boto3
+        pip install boto3
 
         python <<EOF
         import boto3
